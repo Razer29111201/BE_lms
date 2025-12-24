@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,25 +8,37 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="../css/style.css">
 </head>
+
 <body>
   <div class="app-container">
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header"><a href="../index.html" class="logo"><div class="logo-icon"><i class="fas fa-graduation-cap"></i></div><span>LMS</span></a></div>
-      <nav class="sidebar-nav" id="sidebarNav"></nav>
-    </aside>
+    <aside class="sidebar" id="sidebar"></aside>
     <main class="main-content">
       <header class="header">
         <div class="header-left">
-          <button class="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')"><i class="fas fa-bars"></i></button>
-          <div><h1 class="page-title">Điểm danh</h1><p class="page-subtitle" id="sessionInfo">Chọn buổi học để điểm danh</p></div>
+          <button class="menu-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')"><i
+              class="fas fa-bars"></i></button>
+          <div>
+            <h1 class="page-title">Điểm danh</h1>
+            <p class="page-subtitle" id="sessionInfo">Chọn buổi học để điểm danh</p>
+          </div>
         </div>
         <div class="header-right">
-          <div class="user-menu" onclick="auth.logout()"><div class="user-avatar" id="userAvatar">U</div><div class="user-info"><div class="user-name" id="userName">User</div><div class="user-role" id="userRole">Role</div></div></div>
+          <button class="theme-toggle" onclick="theme.toggle()" title="Đổi giao diện"><i class="fas fa-moon"></i><i
+              class="fas fa-sun"></i></button>
+          <div class="user-menu" onclick="auth.logout()">
+            <div class="user-avatar" id="userAvatar">U</div>
+            <div class="user-info">
+              <div class="user-name" id="userName">User</div>
+              <div class="user-role" id="userRole">Role</div>
+            </div>
+          </div>
         </div>
       </header>
       <div class="page-content">
         <div class="filters-bar">
-          <select id="sessionSelect" class="filter-select" onchange="loadStudents()" style="min-width:300px;"><option value="">-- Chọn buổi học --</option></select>
+          <select id="sessionSelect" class="filter-select" onchange="loadStudents()" style="min-width:300px;">
+            <option value="">-- Chọn buổi học --</option>
+          </select>
         </div>
         <div class="table-container" id="attendanceTable"></div>
         <div id="saveBtn" style="display:none;margin-top:20px;text-align:right;">
@@ -42,9 +55,9 @@
 
     async function init() {
       if (!auth.checkAuth()) return;
-      buildSidebar('sidebarNav');
+      buildSidebar('sidebar');
       await loadSessions();
-      
+
       const urlParams = new URLSearchParams(window.location.search);
       const sessionId = urlParams.get('sessionId');
       if (sessionId) {
@@ -55,17 +68,23 @@
 
     async function loadSessions() {
       try {
-        const result = await api.get('/sessions?limit=100');
+        const query = branch.buildQuery({ limit: 100 });
+        const result = await api.get('/sessions' + query);
+        const showBranch = auth.user?.is_system_wide && !branch.getId();
+
         document.getElementById('sessionSelect').innerHTML = '<option value="">-- Chọn buổi học --</option>' +
-          (result.data || []).map(s => `<option value="${s.id}">${s.class_name} - Buổi ${s.session_number} (${ui.formatDate(s.session_date)})</option>`).join('');
-      } catch (e) {}
+          (result.data || []).map(s => {
+            const branchInfo = showBranch && s.branch_name ? ` [${s.branch_name}]` : '';
+            return `<option value="${s.id}">${s.class_name}${branchInfo} - Buổi ${s.session_number} (${ui.formatDate(s.session_date)})</option>`;
+          }).join('');
+      } catch (e) { console.error(e); }
     }
 
     async function loadStudents() {
       const sessionId = document.getElementById('sessionSelect').value;
       const container = document.getElementById('attendanceTable');
       const saveBtn = document.getElementById('saveBtn');
-      
+
       if (!sessionId) {
         container.innerHTML = '<div class="empty-state"><p>Chọn buổi học để điểm danh</p></div>';
         saveBtn.style.display = 'none';
@@ -106,7 +125,7 @@
         html += '</tbody></table>';
         container.innerHTML = html;
         saveBtn.style.display = 'block';
-      } catch (e) { container.innerHTML = '<p>Lỗi</p>'; }
+      } catch (e) { container.innerHTML = '<p>Lỗi: ' + e.message + '</p>'; }
     }
 
     async function saveAttendance() {
@@ -136,4 +155,5 @@
     document.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
+
 </html>

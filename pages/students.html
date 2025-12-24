@@ -61,26 +61,71 @@
       <div class="modal-body">
         <form id="dataForm">
           <input type="hidden" id="itemId">
-          <div class="form-row" id="branchRow" style="display:none;">
+
+          <!-- Cơ sở -->
+          <div class="form-row" id="branchRow">
             <div class="form-group">
-              <label class="form-label required">Cơ sở</label>
-              <select name="branchId" id="branchSelect" class="form-control"></select>
+              <label class="form-label required"><i class="fas fa-building"></i> Cơ sở</label>
+              <select name="branchId" id="branchSelect" class="form-control" required>
+                <option value="">Đang tải...</option>
+              </select>
             </div>
           </div>
+
+          <h4 style="margin: 16px 0 12px; color: var(--primary-color);"><i class="fas fa-user-graduate"></i> Thông tin
+            học sinh</h4>
+
           <div class="form-row">
             <div class="form-group"><label class="form-label required">Họ tên</label><input type="text" name="fullName"
                 class="form-control" required></div>
             <div class="form-group"><label class="form-label required">Năm sinh</label><input type="number"
-                name="birthYear" class="form-control" required></div>
+                name="birthYear" class="form-control" min="2005" max="2022" required></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label class="form-label required">Tên PH</label><input type="text"
+            <div class="form-group">
+              <label class="form-label">Giới tính</label>
+              <select name="gender" class="form-control">
+                <option value="">Chọn</option>
+                <option value="male">Nam</option>
+                <option value="female">Nữ</option>
+              </select>
+            </div>
+            <div class="form-group"><label class="form-label">Địa chỉ</label><input type="text" name="address"
+                class="form-control"></div>
+          </div>
+
+          <h4 style="margin: 20px 0 12px; color: var(--primary-color);"><i class="fas fa-user-friends"></i> Thông tin
+            phụ huynh</h4>
+
+          <div class="form-row">
+            <div class="form-group"><label class="form-label required">Tên phụ huynh</label><input type="text"
                 name="parentName" class="form-control" required></div>
-            <div class="form-group"><label class="form-label required">SĐT PH</label><input type="tel"
+            <div class="form-group"><label class="form-label required">SĐT phụ huynh</label><input type="tel"
                 name="parentPhone" class="form-control" required></div>
           </div>
-          <div class="form-group"><label class="form-label">Email PH</label><input type="email" name="parentEmail"
-              class="form-control"></div>
+          <div class="form-group"><label class="form-label">Email phụ huynh</label><input type="email"
+              name="parentEmail" class="form-control"></div>
+
+          <h4 style="margin: 20px 0 12px; color: var(--primary-color);"><i class="fas fa-book"></i> Thông tin học tập
+          </h4>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Môn học</label>
+              <select name="subjectId" id="subjectSelect" class="form-control">
+                <option value="">Chọn môn</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cấp độ</label>
+              <select name="levelId" id="levelSelect" class="form-control">
+                <option value="">Chọn cấp độ</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label">Lộ trình học</label><input type="text" name="learningPath"
+              class="form-control" placeholder="VD: Robotics Beginner 6 tháng"></div>
+
           <div class="form-group"><label class="form-label">Ghi chú</label><textarea name="note" class="form-control"
               rows="2"></textarea></div>
         </form>
@@ -100,11 +145,23 @@
       buildSidebar('sidebar');
       if (!auth.hasRole('SALE', 'ADMIN')) document.getElementById('btnCreate').style.display = 'none';
 
-      // Setup branch select for form
       setupBranchSelect();
-
+      await loadOptions();
       await loadStats();
       await loadData();
+    }
+
+    async function loadOptions() {
+      try {
+        const [subjects, levels] = await Promise.all([
+          api.get('/common/subjects'),
+          api.get('/common/levels')
+        ]);
+        document.getElementById('subjectSelect').innerHTML = '<option value="">Chọn môn</option>' +
+          (subjects.data || []).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        document.getElementById('levelSelect').innerHTML = '<option value="">Chọn cấp độ</option>' +
+          (levels.data || []).map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+      } catch (e) { console.error(e); }
     }
 
     async function loadStats() {
@@ -196,9 +253,14 @@
           branchId: s.branch_id,
           fullName: s.full_name,
           birthYear: s.birth_year,
+          gender: s.gender,
+          address: s.address,
           parentName: s.parent_name,
           parentPhone: s.parent_phone,
           parentEmail: s.parent_email,
+          subjectId: s.subject_id,
+          levelId: s.level_id,
+          learningPath: s.learning_path,
           note: s.note
         });
         modal.show('formModal');
@@ -227,37 +289,44 @@
     }
 
     function setupBranchSelect() {
-      const branches = auth.user?.branches || [];
+      loadBranchOptions();
+    }
+
+    async function loadBranchOptions() {
       const branchRow = document.getElementById('branchRow');
       const branchSelect = document.getElementById('branchSelect');
 
-      if (auth.user?.is_system_wide || branches.length > 1) {
-        branchRow.style.display = 'flex';
+      try {
+        const result = await api.get('/branches');
+        const allBranches = result.data || [];
 
-        if (auth.user?.is_system_wide) {
-          loadAllBranches();
+        if (allBranches.length === 0) {
+          branchSelect.innerHTML = '<option value="">Chưa có cơ sở</option>';
+          return;
+        }
+
+        const userBranches = auth.user?.branches || [];
+        const isAdmin = auth.user?.is_system_wide;
+        let displayBranches = isAdmin ? allBranches : (userBranches.length ? userBranches : allBranches);
+
+        if (displayBranches.length === 1 && !isAdmin) {
+          branchRow.style.display = 'none';
+          branchSelect.innerHTML = `<option value="${displayBranches[0].id}" selected>${displayBranches[0].name}</option>`;
         } else {
-          branchSelect.innerHTML = branches.map(b =>
-            `<option value="${b.id}" ${b.is_primary ? 'selected' : ''}>${b.name}</option>`
+          branchRow.style.display = 'flex';
+          const currentBranchId = branch.getId() || displayBranches[0]?.id;
+          branchSelect.innerHTML = displayBranches.map(b =>
+            `<option value="${b.id}" ${b.id == currentBranchId ? 'selected' : ''}>${b.name}</option>`
           ).join('');
         }
-      } else if (branches.length === 1) {
-        branchRow.style.display = 'none';
-        branchSelect.innerHTML = `<option value="${branches[0].id}" selected>${branches[0].name}</option>`;
+      } catch (e) {
+        console.error('Load branches error:', e);
+        branchSelect.innerHTML = '<option value="">Lỗi tải</option>';
       }
     }
 
     async function loadAllBranches() {
-      try {
-        const result = await api.get('/branches');
-        const allBranches = result.data || [];
-        const branchSelect = document.getElementById('branchSelect');
-        const currentBranchId = branch.getId();
-
-        branchSelect.innerHTML = allBranches.map(b =>
-          `<option value="${b.id}" ${b.id == currentBranchId ? 'selected' : ''}>${b.name}</option>`
-        ).join('');
-      } catch (e) { console.error(e); }
+      await loadBranchOptions();
     }
 
     document.addEventListener('DOMContentLoaded', init);

@@ -147,41 +147,63 @@
     }
 
     function setupBranchSelect() {
-      const branches = auth.user?.branches || [];
-      const branchSelect = document.getElementById('branchFormSelect');
       const branchGroup = document.getElementById('branchFormGroup');
+      const branchSelect = document.getElementById('branchFormSelect');
 
-      // Admin hoặc user nhiều cơ sở: hiển thị dropdown
-      if (auth.user?.is_system_wide || branches.length > 1) {
-        branchGroup.style.display = 'block';
+      // Luôn load branches từ API cho mọi user
+      loadBranchOptions();
+    }
 
-        // Nếu admin, load tất cả cơ sở từ API
-        if (auth.user?.is_system_wide) {
-          loadAllBranches();
+    async function loadBranchOptions() {
+      const branchGroup = document.getElementById('branchFormGroup');
+      const branchSelect = document.getElementById('branchFormSelect');
+
+      try {
+        console.log('Loading branches from API...');
+        const result = await api.get('/branches');
+        console.log('API result:', result);
+        const allBranches = result.data || [];
+        console.log('Branches:', allBranches);
+
+        if (allBranches.length === 0) {
+          branchSelect.innerHTML = '<option value="">Chưa có cơ sở - Vui lòng import database</option>';
+          return;
+        }
+
+        // User có branches từ auth
+        const userBranches = auth.user?.branches || [];
+        const isAdmin = auth.user?.is_system_wide;
+        console.log('isAdmin:', isAdmin, 'userBranches:', userBranches);
+
+        // Xác định danh sách branches hiển thị
+        let displayBranches = isAdmin ? allBranches : userBranches;
+
+        if (displayBranches.length === 0) {
+          displayBranches = allBranches; // Fallback
+        }
+
+        // Nếu chỉ có 1 branch, ẩn dropdown
+        if (displayBranches.length === 1 && !isAdmin) {
+          branchGroup.style.display = 'none';
+          branchSelect.innerHTML = `<option value="${displayBranches[0].id}" selected>${displayBranches[0].name}</option>`;
         } else {
-          // User nhiều cơ sở: hiển thị danh sách của họ
-          branchSelect.innerHTML = branches.map(b =>
-            `<option value="${b.id}" ${b.is_primary ? 'selected' : ''}>${b.name}</option>`
+          // Hiển thị dropdown
+          branchGroup.style.display = 'block';
+          const currentBranchId = branch.getId() || displayBranches[0]?.id;
+
+          branchSelect.innerHTML = displayBranches.map(b =>
+            `<option value="${b.id}" ${b.id == currentBranchId ? 'selected' : ''}>${b.name}</option>`
           ).join('');
         }
-      } else if (branches.length === 1) {
-        // User 1 cơ sở: ẩn dropdown, tự động gán
-        branchGroup.style.display = 'none';
-        branchSelect.innerHTML = `<option value="${branches[0].id}" selected>${branches[0].name}</option>`;
+      } catch (e) {
+        console.error('Load branches error:', e);
+        branchSelect.innerHTML = '<option value="">Lỗi tải cơ sở: ' + e.message + '</option>';
       }
     }
 
     async function loadAllBranches() {
-      try {
-        const result = await api.get('/branches');
-        const allBranches = result.data || [];
-        const branchSelect = document.getElementById('branchFormSelect');
-        const currentBranchId = branch.getId();
-
-        branchSelect.innerHTML = allBranches.map(b =>
-          `<option value="${b.id}" ${b.id == currentBranchId ? 'selected' : ''}>${b.name}</option>`
-        ).join('');
-      } catch (e) { console.error(e); }
+      // Deprecated - use loadBranchOptions instead
+      await loadBranchOptions();
     }
 
     async function loadSubjects() {

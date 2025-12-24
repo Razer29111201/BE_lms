@@ -8,66 +8,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="../css/style.css">
   <style>
-    .class-card {
-      background: var(--bg-primary);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 20px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
 
-    .class-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-
-    .class-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 12px;
-    }
-
-    .class-card-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .class-card-code {
-      font-size: 12px;
-      color: var(--text-muted);
-      font-family: monospace;
-    }
-
-    .class-card-info {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
-      font-size: 13px;
-      color: var(--text-secondary);
-    }
-
-    .class-card-info i {
-      width: 16px;
-      color: var(--primary-color);
-    }
-
-    .class-card-footer {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 16px;
-      padding-top: 12px;
-      border-top: 1px solid var(--border-color);
-    }
-
-    .cards-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-      gap: 20px;
-    }
   </style>
 </head>
 
@@ -131,10 +72,12 @@
         <form id="classForm">
           <input type="hidden" id="classId">
 
-          <!-- Branch Selection -->
-          <div class="form-group" id="branchFormGroup" style="display:none;">
+          <!-- Branch Selection - Always visible -->
+          <div class="form-group" id="branchFormGroup">
             <label class="form-label required"><i class="fas fa-building"></i> Cơ sở</label>
-            <select name="branchId" id="branchFormSelect" class="form-control"></select>
+            <select name="branchId" id="branchFormSelect" class="form-control" required>
+              <option value="">Đang tải...</option>
+            </select>
           </div>
 
           <div class="form-row">
@@ -221,38 +164,44 @@
     }
 
     function setupBranchSelect() {
-      const branches = auth.user?.branches || [];
-      const branchSelect = document.getElementById('branchFormSelect');
+      loadBranchOptions();
+    }
+
+    async function loadBranchOptions() {
       const branchGroup = document.getElementById('branchFormGroup');
+      const branchSelect = document.getElementById('branchFormSelect');
 
-      // Admin hoặc user nhiều cơ sở: hiển thị dropdown
-      if (auth.user?.is_system_wide || branches.length > 1) {
-        branchGroup.style.display = 'block';
+      try {
+        const result = await api.get('/branches');
+        const allBranches = result.data || [];
 
-        if (auth.user?.is_system_wide) {
-          loadAllBranches();
+        if (allBranches.length === 0) {
+          branchSelect.innerHTML = '<option value="">Chưa có cơ sở</option>';
+          return;
+        }
+
+        const userBranches = auth.user?.branches || [];
+        const isAdmin = auth.user?.is_system_wide;
+        let displayBranches = isAdmin ? allBranches : (userBranches.length ? userBranches : allBranches);
+
+        if (displayBranches.length === 1 && !isAdmin) {
+          branchGroup.style.display = 'none';
+          branchSelect.innerHTML = `<option value="${displayBranches[0].id}" selected>${displayBranches[0].name}</option>`;
         } else {
-          branchSelect.innerHTML = branches.map(b =>
-            `<option value="${b.id}" ${b.is_primary ? 'selected' : ''}>${b.name}</option>`
+          branchGroup.style.display = 'block';
+          const currentBranchId = branch.getId() || displayBranches[0]?.id;
+          branchSelect.innerHTML = displayBranches.map(b =>
+            `<option value="${b.id}" ${b.id == currentBranchId ? 'selected' : ''}>${b.name}</option>`
           ).join('');
         }
-      } else if (branches.length === 1) {
-        branchGroup.style.display = 'none';
-        branchSelect.innerHTML = `<option value="${branches[0].id}" selected>${branches[0].name}</option>`;
+      } catch (e) {
+        console.error('Load branches error:', e);
+        branchSelect.innerHTML = '<option value="">Lỗi tải</option>';
       }
     }
 
     async function loadAllBranches() {
-      try {
-        const result = await api.get('/branches');
-        const allBranches = result.data || [];
-        const branchSelect = document.getElementById('branchFormSelect');
-        const currentBranchId = branch.getId();
-
-        branchSelect.innerHTML = allBranches.map(b =>
-          `<option value="${b.id}" ${b.id == currentBranchId ? 'selected' : ''}>${b.name}</option>`
-        ).join('');
-      } catch (e) { console.error(e); }
+      await loadBranchOptions();
     }
 
     async function loadOptions() {
@@ -305,7 +254,7 @@
             </div>
             <span class="badge badge-${c.status === 'active' ? 'success' : 'secondary'}">${c.status === 'active' ? 'Hoạt động' : 'Ngừng'}</span>
           </div>
-          ${showBranch ? `<div class="branch-tag" style="margin-bottom:12px;"><i class="fas fa-building"></i> ${c.branch_name || '-'}</div>` : ''}
+          ${showBranch && c.branch_name ? `<div class="branch-tag" style="margin-bottom:8px;display:inline-flex;"><i class="fas fa-building"></i> ${c.branch_name}</div>` : ''}
           <div class="class-card-info">
             <div><i class="fas fa-book"></i> ${c.subject_name || 'Chưa chọn môn'}</div>
             <div><i class="fas fa-layer-group"></i> ${c.level_name || 'Chưa chọn cấp độ'}</div>
