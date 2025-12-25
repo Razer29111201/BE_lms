@@ -547,6 +547,7 @@
         if (displayBranches.length === 1 && !isAdmin) {
           branchGroup.style.display = 'none';
           branchSelect.innerHTML = `<option value="${displayBranches[0].id}" selected>${displayBranches[0].name}</option>`;
+          branchSelect.value = displayBranches[0].id; // Ensure value is set
         } else {
           branchGroup.style.display = 'block';
           const currentBranchId = branch.getId() || displayBranches[0]?.id;
@@ -645,7 +646,19 @@
       if (!form.validate(formEl)) { ui.error('Vui lòng điền đầy đủ'); return; }
       const data = form.getData(formEl);
       const id = document.getElementById('classId').value;
+
+      // Đảm bảo lấy branchId từ select (kể cả khi ẩn)
+      const branchSelect = document.getElementById('branchFormSelect');
+      if (!data.branchId && branchSelect) {
+        data.branchId = branchSelect.value;
+      }
       if (!data.branchId) data.branchId = branch.getId() || auth.user?.branches?.[0]?.id;
+
+      if (!data.branchId) {
+        ui.error('Cần chọn cơ sở');
+        return;
+      }
+
       try {
         if (id) await api.put(`/classes/${id}`, data);
         else await api.post('/classes', data);

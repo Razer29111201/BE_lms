@@ -159,45 +159,45 @@
       const branchSelect = document.getElementById('branchFormSelect');
 
       try {
-        console.log('Loading branches from API...');
         const result = await api.get('/branches');
-        console.log('API result:', result);
         const allBranches = result.data || [];
-        console.log('Branches:', allBranches);
 
         if (allBranches.length === 0) {
-          branchSelect.innerHTML = '<option value="">Chưa có cơ sở - Vui lòng import database</option>';
+          branchSelect.innerHTML = '<option value="">Chưa có cơ sở</option>';
           return;
         }
 
-        // User có branches từ auth
         const userBranches = auth.user?.branches || [];
         const isAdmin = auth.user?.is_system_wide;
-        console.log('isAdmin:', isAdmin, 'userBranches:', userBranches);
 
-        // Xác định danh sách branches hiển thị
-        let displayBranches = isAdmin ? allBranches : userBranches;
-
-        if (displayBranches.length === 0) {
-          displayBranches = allBranches; // Fallback
-        }
-
-        // Nếu chỉ có 1 branch, ẩn dropdown
-        if (displayBranches.length === 1 && !isAdmin) {
-          branchGroup.style.display = 'none';
-          branchSelect.innerHTML = `<option value="${displayBranches[0].id}" selected>${displayBranches[0].name}</option>`;
+        // User có branches riêng và không phải admin
+        if (userBranches.length > 0 && !isAdmin) {
+          if (userBranches.length === 1) {
+            // Chỉ có 1 cơ sở - ẨN dropdown (display:none vẫn gửi được value)
+            branchGroup.style.display = 'none';
+            branchSelect.innerHTML = `<option value="${userBranches[0].id}">${userBranches[0].name}</option>`;
+            branchSelect.value = userBranches[0].id;
+            branchSelect.disabled = false; // Đảm bảo không bị disabled
+          } else {
+            // Nhiều cơ sở - cho phép chọn
+            branchGroup.style.display = 'block';
+            branchSelect.disabled = false;
+            const primaryId = auth.user?.primaryBranch?.id || userBranches[0]?.id;
+            branchSelect.innerHTML = userBranches.map(b =>
+              `<option value="${b.id}" ${b.id == primaryId ? 'selected' : ''}>${b.name}</option>`
+            ).join('');
+          }
         } else {
-          // Hiển thị dropdown
+          // Admin - hiển thị tất cả
           branchGroup.style.display = 'block';
-          const currentBranchId = branch.getId() || displayBranches[0]?.id;
-
-          branchSelect.innerHTML = displayBranches.map(b =>
+          branchSelect.disabled = false;
+          const currentBranchId = branch.getId() || allBranches[0]?.id;
+          branchSelect.innerHTML = allBranches.map(b =>
             `<option value="${b.id}" ${b.id == currentBranchId ? 'selected' : ''}>${b.name}</option>`
           ).join('');
         }
       } catch (e) {
         console.error('Load branches error:', e);
-        branchSelect.innerHTML = '<option value="">Lỗi tải cơ sở: ' + e.message + '</option>';
       }
     }
 
@@ -327,7 +327,26 @@
       const data = form.getData(formEl);
       const id = document.getElementById('expId').value;
 
-      if (!data.branchId) data.branchId = branch.getId() || auth.user?.branches?.[0]?.id;
+      // Debug logs
+      const branchSelect = document.getElementById('branchFormSelect');
+      console.log('=== DEBUG BRANCH ===');
+      console.log('branchSelect element:', branchSelect);
+      console.log('branchSelect.value:', branchSelect?.value);
+      console.log('branchSelect.disabled:', branchSelect?.disabled);
+      console.log('data.branchId from form:', data.branchId);
+      console.log('auth.user.branches:', auth.user?.branches);
+      console.log('branch.getId():', branch.getId());
+
+      // Lấy branchId từ select (display:none vẫn gửi được nếu không disabled)
+      data.branchId = branchSelect?.value || data.branchId || branch.getId() || auth.user?.branches?.[0]?.id;
+
+      console.log('Final branchId:', data.branchId);
+      console.log('===================');
+
+      if (!data.branchId) {
+        ui.error('Cần chọn cơ sở');
+        return;
+      }
 
       try {
         if (id) await api.put(`/experience/${id}`, data);
@@ -366,14 +385,27 @@
           </div>
         `;
 
-        let footerHtml = `<button class="btn btn-secondary" onclick="modal.hide('viewModal')">Đóng</button>`;
+        let footerHtml = '';
 
         if (e.status === 'pending') {
-          footerHtml += `<button class="btn btn-secondary" onclick="editExp(${e.id})"><i class="fas fa-edit"></i> Sửa</button><button class="btn btn-danger" onclick="deleteExp(${e.id})"><i class="fas fa-trash"></i> Xóa</button><button class="btn btn-warning" onclick="noShowExp(${e.id})"><i class="fas fa-user-slash"></i> Không đến</button><button class="btn btn-success" onclick="completeExp(${e.id})"><i class="fas fa-check"></i> Hoàn thành</button><button class="btn btn-primary" onclick="convertToTrial(${e.id})"><i class="fas fa-user-plus"></i> Tạo học thử</button>`;
+          footerHtml = `
+            <button class="btn btn-danger" onclick="deleteExp(${e.id})"><i class="fas fa-trash"></i></button>
+            <button class="btn btn-secondary" onclick="editExp(${e.id})"><i class="fas fa-edit"></i></button>
+            <button class="btn btn-warning" onclick="noShowExp(${e.id})"><i class="fas fa-user-slash"></i> K.đến</button>
+            <button class="btn btn-success" onclick="completeExp(${e.id})"><i class="fas fa-check"></i> Xong</button>
+            <button class="btn btn-primary" onclick="convertToTrial(${e.id})"><i class="fas fa-user-plus"></i> Học thử</button>
+          `;
         } else if (e.status === 'completed' && !e.trialStudent) {
-          footerHtml += `<button class="btn btn-danger" onclick="deleteExp(${e.id})"><i class="fas fa-trash"></i> Xóa</button><button class="btn btn-primary" onclick="convertToTrial(${e.id})"><i class="fas fa-user-plus"></i> Tạo học thử</button>`;
-        } else if (e.status === 'no_show' || e.status === 'cancelled') {
-          footerHtml += `<button class="btn btn-danger" onclick="deleteExp(${e.id})"><i class="fas fa-trash"></i> Xóa</button>`;
+          footerHtml = `
+            <button class="btn btn-secondary" onclick="modal.hide('viewModal')">Đóng</button>
+            <button class="btn btn-danger" onclick="deleteExp(${e.id})"><i class="fas fa-trash"></i> Xóa</button>
+            <button class="btn btn-primary" onclick="convertToTrial(${e.id})"><i class="fas fa-user-plus"></i> Tạo học thử</button>
+          `;
+        } else {
+          footerHtml = `
+            <button class="btn btn-secondary" onclick="modal.hide('viewModal')">Đóng</button>
+            <button class="btn btn-danger" onclick="deleteExp(${e.id})"><i class="fas fa-trash"></i> Xóa</button>
+          `;
         }
 
         document.getElementById('viewFooter').innerHTML = footerHtml;
